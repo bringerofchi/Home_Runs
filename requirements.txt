@@ -1,0 +1,17 @@
+# Core
+requests
+pandas
+python-dotenv
+
+# Dashboard (webapp/)
+flask
+
+# Database
+sqlalchemy
+
+# Testing
+pytest
+
+# Optional API layer (uncomment when api/ is implemented)
+# fastapi
+# uvicorn

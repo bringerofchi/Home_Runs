@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MLB HR Edge Lab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>MLB HR Edge Lab</h1>
+    <p class="subtitle">Home Run Betting Edge Dashboard</p>
+  </header>
+
+  <main>
+    <section class="card" id="config-card">
+      <h2>Odds Provider API Keys</h2>
+      <p class="hint">
+        Primary provider is required; the two backups are optional. All
+        keys are saved locally to a .env file in the project folder --
+        never sent anywhere except each provider's own API.
+      </p>
+
+      <h3 class="subheading">Primary: The Odds API</h3>
+      <p class="hint">
+        Get a free key at
+        <a href="https://the-odds-api.com/" target="_blank" rel="noopener">the-odds-api.com</a>.
+        500 credits/month free, ~1 credit per game for HR props.
+      </p>
+      <div class="row">
+        <input type="password" id="odds-api-key-input"
+               placeholder="{{ 'Key saved -- paste a new one to replace it' if has_keys.odds_api else 'Paste your Odds API key' }}">
+        <button class="save-provider-key-btn" data-provider="odds_api" data-input="odds-api-key-input">Save</button>
+      </div>
+      <p class="provider-key-status status" data-provider="odds_api"></p>
+
+      <h3 class="subheading">Backup 1: ParlayAPI</h3>
+      <p class="hint">
+        Get a free key at
+        <a href="https://parlay-api.com/" target="_blank" rel="noopener">parlay-api.com</a>.
+        1,000 credits/month free, single-call player-props endpoint
+        (cheaper per-lookup than The Odds API).
+      </p>
+      <div class="row">
+        <input type="password" id="parlay-api-key-input"
+               placeholder="{{ 'Key saved -- paste a new one to replace it' if has_keys.parlay_api else 'Paste your ParlayAPI key (optional)' }}">
+        <button class="save-provider-key-btn" data-provider="parlay_api" data-input="parlay-api-key-input">Save</button>
+      </div>
+      <p class="provider-key-status status" data-provider="parlay_api"></p>
+
+      <h3 class="subheading">Backup 2: SharpAPI</h3>
+      <p class="hint">
+        Get a key at
+        <a href="https://sharpapi.io/" target="_blank" rel="noopener">sharpapi.io</a>.
+        Rate-limited free tier rather than credit-metered, but only 2
+        sportsbooks included on the free tier.
+      </p>
+      <div class="row">
+        <input type="password" id="sharp-api-key-input"
+               placeholder="{{ 'Key saved -- paste a new one to replace it' if has_keys.sharp_api else 'Paste your SharpAPI key (optional)' }}">
+        <button class="save-provider-key-btn" data-provider="sharp_api" data-input="sharp-api-key-input">Save</button>
+      </div>
+      <p class="provider-key-status status" data-provider="sharp_api"></p>
+    </section>
+
+    <section class="card">
+      <h2>Fetch Home Run Odds</h2>
+      <p class="hint">
+        Results are cached for 30 minutes per date/book to conserve API quota
+        (The Odds API's free tier is 500 credits/month, and a full MLB slate
+        costs ~15 credits per live pull -- see note below if you're worried
+        about running out).
+      </p>
+      <div class="row">
+        <label>Date
+          <input type="date" id="date-input">
+        </label>
+        <label>Book
+          <select id="book-input">
+            <option value="any" selected>Any available book</option>
+            <option value="fanduel">FanDuel</option>
+            <option value="draftkings">DraftKings</option>
+            <option value="betmgm">BetMGM</option>
+            <option value="betrivers">BetRivers</option>
+          </select>
+        </label>
+        <label style="flex-direction: row; align-items: center; gap: 0.4rem;">
+          <input type="checkbox" id="force-refresh-input" style="width: auto;">
+          Force live refresh
+        </label>
+        <button id="fetch-btn">Fetch Odds</button>
+      </div>
+      <p id="fetch-status" class="status"></p>
+    </section>
+
+
+    <section class="card">
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Book</th>
+            <th>Odds</th>
+            <th>Implied Probability</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p id="empty-state" class="hint">No odds fetched yet.</p>
+    </section>
+
+    <section class="card">
+      <h2>Validate MLB Stats API</h2>
+      <p class="hint">
+        Checks a live pull against the official MLB Stats API: probable
+        pitchers present and mapped to a valid handedness, and whether
+        starting lineups have been confirmed yet for each game.
+      </p>
+      <div class="row">
+        <label>Date
+          <input type="date" id="mlb-date-input">
+        </label>
+        <button id="validate-mlb-btn">Run Validation</button>
+      </div>
+      <p id="mlb-validate-status" class="status"></p>
+      <div id="mlb-validate-results"></div>
+    </section>
+
+    <section class="card">
+      <h2>Validate Statcast / Baseball Savant</h2>
+      <p class="hint">
+        <strong>Highest-risk data source in this project</strong> -- Savant has no
+        official API, only a CSV export that can change without notice. This
+        checks whether the columns we expect actually come back, and whether
+        the values look sane (right numeric range, not garbage).
+      </p>
+      <div class="row">
+        <label>Season
+          <input type="number" id="statcast-season-input" min="2015" max="2030" step="1">
+        </label>
+        <label>Player type
+          <select id="statcast-type-input">
+            <option value="batter" selected>Batter</option>
+            <option value="pitcher">Pitcher</option>
+          </select>
+        </label>
+        <button id="validate-statcast-btn">Run Validation</button>
+      </div>
+      <p id="statcast-validate-status" class="status"></p>
+      <div id="statcast-validate-results"></div>
+    </section>
+
+    <section class="card">
+      <h2>Daily HR Alpha Score Report</h2>
+      <p class="hint">
+        The full pipeline: ingest games/pitchers/hitters/weather/odds, score
+        every player, rank by HR Alpha Score. Stage 1 (Watch List) runs
+        before lineups post and includes bench players (can't know starters
+        yet). Stage 2 (Final Rankings) only scores confirmed starters and
+        includes real betting edge if an Odds API key is saved. Odds are
+        reused from cache (30 min) unless you force a refresh -- re-running
+        a report on the same day won't burn extra API quota by default.
+      </p>
+      <div class="row">
+        <label>Date
+          <input type="date" id="report-date-input">
+        </label>
+        <label>Stage
+          <select id="report-stage-input">
+            <option value="final" selected>Stage 2: Final Rankings</option>
+            <option value="watch">Stage 1: Watch List</option>
+          </select>
+        </label>
+        <label style="flex-direction: row; align-items: center; gap: 0.4rem;">
+          <input type="checkbox" id="report-force-refresh-input" style="width: auto;">
+          Force live odds refresh
+        </label>
+        <button id="generate-report-btn">Generate Report</button>
+      </div>
+      <p id="report-status" class="status"></p>
+      <div id="report-warnings"></div>
+      <table id="report-table" style="display: none;">
+        <thead id="report-table-head"></thead>
+        <tbody id="report-table-body"></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Historical Tracking &amp; Backtesting</h2>
+      <p class="hint">
+        Every Stage 2 report you generate is automatically saved. Record
+        actual results here after games finish, then run the backtest
+        summary to see hit rate and ROI by Alpha Score tier -- the real
+        answer to whether the scoring weights mean anything.
+      </p>
+
+      <h3 class="subheading">Data summary</h3>
+      <button id="load-date-summary-btn">Load Data Summary</button>
+      <table id="date-summary-table" style="display: none;">
+        <thead>
+          <tr>
+            <th>Date</th><th>Players Saved</th><th>Results Recorded</th>
+            <th>HRs Hit</th><th>Avg Alpha Score</th><th>Top Alpha Score</th>
+          </tr>
+        </thead>
+        <tbody id="date-summary-table-body"></tbody>
+      </table>
+      <p id="date-summary-status" class="hint" style="margin-top: 0.5rem;"></p>
+
+      <h3 class="subheading">Sub-metric breakdown diagnostic</h3>
+      <p class="hint">
+        For every scoring sub-metric across all four categories: what % of
+        saved rows actually had data for it ("% Rows w/ Data"), vs what %
+        of its max points it captures on average. A sub-metric near 0% data
+        is structurally unreachable right now (not ingested anywhere yet) --
+        that's different from a sub-metric that has data but is just
+        scoring low. Sorted worst-first within each category.
+      </p>
+      <button id="load-breakdown-btn">Run Diagnostic</button>
+      <p id="breakdown-status" class="status"></p>
+      <div id="breakdown-results"></div>
+
+      <h3 class="subheading">Benchmark range calibration audit</h3>
+      <p class="hint">
+        Checks every hardcoded scoring range in pitcher_model.py and
+        hitter_model.py against real live league-wide distributions
+        (Statcast leaderboards + MLB Stats API bulk stats). This is what
+        would catch a range like the one found miscalibrated in
+        fly_ball_pct -- flags any range where the real data clusters
+        outside what the current low/high assumes.
+      </p>
+      <div class="row">
+        <label>Season
+          <input type="number" id="calibration-season-input" min="2015" max="2030" step="1">
+        </label>
+        <label>Min IP (hr9 outlier filter, 0=off)
+          <input type="number" id="calibration-min-ip-input" min="0" step="1" value="0">
+        </label>
+        <label>Min PA (iso outlier filter, 0=off)
+          <input type="number" id="calibration-min-pa-input" min="0" step="1" value="0">
+        </label>
+        <button id="run-calibration-btn">Run Calibration Audit</button>
+      </div>
+      <p class="hint">
+        hr9 and iso pull from playerPool=ALL, which includes extreme
+        small-sample outliers (e.g. a 1-inning call-up). Raise these to
+        test whether that's inflating their production-impact crush rate
+        vs. a genuine range problem -- try 20 IP / 50 PA as a starting point.
+      </p>
+      <p id="calibration-status" class="status"></p>
+      <div id="calibration-warnings"></div>
+      <table id="calibration-table" style="display: none;">
+        <thead>
+          <tr>
+            <th>Metric</th><th>Current Range</th><th>Sample</th>
+            <th>Real p10</th><th>Real p50</th><th>Real p90</th>
+            <th>Suggested Range</th><th>Impact</th><th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody id="calibration-table-body"></tbody>
+      </table>
+
+      <h3 class="subheading">Raw bulk stats inspector</h3>
+      <p class="hint">
+        Investigates row-count discrepancies (e.g. ISO's 149 vs 565+ for
+        other hitter metrics from the calibration audit) by showing
+        exactly what MLB Stats API's bulk endpoint returns, before any
+        filtering. Distinguishes "the API only sent us this many rows"
+        from "our code dropped rows after receiving them" -- same
+        discipline that resolved the fly-ball units question.
+      </p>
+      <div class="row">
+        <label>Season
+          <input type="number" id="bulk-debug-season-input" min="2015" max="2030" step="1">
+        </label>
+        <label>Group
+          <select id="bulk-debug-group-input">
+            <option value="hitting" selected>Hitting</option>
+            <option value="pitching">Pitching</option>
+          </select>
+        </label>
+        <label>Extra param (optional, e.g. playerPool=ALL)
+          <input type="text" id="bulk-debug-extra-params-input" placeholder="key=value">
+        </label>
+        <button id="run-bulk-debug-btn">Inspect Raw Response</button>
+      </div>
+      <p id="bulk-debug-status" class="status"></p>
+      <div id="bulk-debug-results"></div>
+
+      <h3 class="subheading">Record results for a day</h3>
+      <p class="hint">
+        Pulls real box scores from the MLB Stats API and matches HRs to
+        your saved rankings by player ID -- no manual entry. Only records
+        games that have actually finished; anything still in progress,
+        postponed, or suspended is skipped (shown below) rather than
+        guessed at.
+      </p>
+      <div class="row">
+        <label>Date
+          <input type="date" id="record-date-input">
+        </label>
+        <button id="auto-record-btn">Auto-Fetch Results</button>
+      </div>
+      <p id="record-status" class="status"></p>
+      <div id="record-warnings"></div>
+
+      <h3 class="subheading">Backtest summary (all recorded results)</h3>
+
+      <button id="run-backtest-btn">Run Backtest Summary</button>
+      <table id="backtest-table" style="display: none;">
+        <thead>
+          <tr><th>Tier</th><th>Sample Size</th><th>Hit Rate</th><th>Avg Edge %</th><th>ROI per $1</th></tr>
+        </thead>
+        <tbody id="backtest-table-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const statcastSeasonInput = document.getElementById('statcast-season-input');
+    statcastSeasonInput.value = new Date().getFullYear();
+
+    const statcastValidateStatus = document.getElementById('statcast-validate-status');
+    const statcastValidateResults = document.getElementById('statcast-validate-results');
+
+    document.getElementById('validate-statcast-btn').addEventListener('click', async () => {
+      const season = statcastSeasonInput.value;
+      const playerType = document.getElementById('statcast-type-input').value;
+      statcastValidateStatus.textContent = 'Validating...';
+      statcastValidateResults.innerHTML = '';
+
+      try {
+        const resp = await fetch(`/api/validate-statcast?season=${season}&type=${playerType}`);
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          statcastValidateStatus.textContent = 'Error: ' + data.error;
+          return;
+        }
+
+        const hasProblems = data.missing_columns.length > 0 || data.range_warnings.length > 0;
+        statcastValidateStatus.textContent =
+          `${data.row_count} row(s) returned for ${data.season} (${data.player_type}). ` +
+          (hasProblems ? 'Problems found -- see below.' : 'Looks clean.');
+        statcastValidateStatus.className = hasProblems ? 'status status-warning' : 'status';
+
+        const box = document.createElement('div');
+        box.className = 'mlb-validate-game';
+
+        if (data.missing_columns.length > 0) {
+          const missing = document.createElement('div');
+          missing.className = 'mlb-validate-warning';
+          missing.innerHTML =
+            `<strong>Missing expected columns (Savant may have renamed these):</strong><br>` +
+            data.missing_columns.map(c => `&bull; ${c}`).join('<br>');
+          box.appendChild(missing);
+        }
+
+        if (data.extra_columns.length > 0) {
+          const extra = document.createElement('div');
+          extra.className = 'mlb-validate-line';
+          extra.style.marginTop = '0.4rem';
+          extra.innerHTML =
+            `<strong>Extra columns present (informational, not necessarily a problem):</strong><br>` +
+            data.extra_columns.map(c => `&bull; ${c}`).join('<br>');
+          box.appendChild(extra);
+        }
+
+        if (data.range_warnings.length > 0) {
+          const warn = document.createElement('div');
+          warn.className = 'mlb-validate-warning';
+          warn.style.marginTop = '0.4rem';
+          warn.innerHTML =
+            `<strong>Value sanity-check warnings:</strong><br>` +
+            data.range_warnings.map(w => `&bull; ${w}`).join('<br>');
+          box.appendChild(warn);
+        }
+
+        if (data.sample_rows.length > 0) {
+          const sampleTitle = document.createElement('div');
+          sampleTitle.style.marginTop = '0.4rem';
+          sampleTitle.innerHTML = '<strong>Sample rows (raw, first 5):</strong>';
+          box.appendChild(sampleTitle);
+
+          const rawBox = document.createElement('pre');
+          rawBox.className = 'raw-markets-box';
+          rawBox.textContent = JSON.stringify(data.sample_rows, null, 2);
+          box.appendChild(rawBox);
+        }
+
+        statcastValidateResults.appendChild(box);
+      } catch (e) {
+        statcastValidateStatus.textContent = 'Error: ' + e;
+      }
+    });
+
+    const mlbDateInput = document.getElementById('mlb-date-input');
+    mlbDateInput.valueAsDate = new Date();
+
+    const mlbValidateStatus = document.getElementById('mlb-validate-status');
+    const mlbValidateResults = document.getElementById('mlb-validate-results');
+
+    document.getElementById('validate-mlb-btn').addEventListener('click', async () => {
+      const gameDate = mlbDateInput.value;
+      mlbValidateStatus.textContent = 'Validating...';
+      mlbValidateResults.innerHTML = '';
+
+      try {
+        const resp = await fetch(`/api/validate-mlb-data?date=${gameDate}`);
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          mlbValidateStatus.textContent = 'Error: ' + data.error;
+          return;
+        }
+        if (data.games_found === 0) {
+          mlbValidateStatus.textContent = `No MLB games found for ${data.date}.`;
+          return;
+        }
+
+        const totalWarnings = data.games.reduce((sum, g) => sum + g.warnings.length, 0);
+        mlbValidateStatus.textContent =
+          `${data.games_found} game(s) checked for ${data.date} -- ${totalWarnings} warning(s) total.`;
+
+        for (const g of data.games) {
+          const gameBox = document.createElement('div');
+          gameBox.className = 'mlb-validate-game';
+
+          const title = document.createElement('div');
+          title.innerHTML = `<strong>${g.matchup}</strong> &mdash; ${g.venue} &mdash; ${g.status}`;
+          gameBox.appendChild(title);
+
+          for (const side of ['away', 'home']) {
+            const p = g.probable_pitchers[side];
+            const line = document.createElement('div');
+            line.className = 'mlb-validate-line';
+            if (!p) {
+              line.textContent = `${side}: no probable pitcher listed`;
+              line.classList.add('mlb-validate-warning');
+            } else if (p.error) {
+              line.textContent = `${side} pitcher: ${p.name} -- lookup failed (${p.error})`;
+              line.classList.add('mlb-validate-warning');
+            } else {
+              const handLabel = p.hand ? `throws ${p.hand}` : 'handedness MISSING';
+              line.textContent = `${side} pitcher: ${p.name} (id ${p.id}) -- ${handLabel}`;
+              if (!p.hand) line.classList.add('mlb-validate-warning');
+            }
+            gameBox.appendChild(line);
+          }
+
+          const lineupLine = document.createElement('div');
+          lineupLine.className = 'mlb-validate-line';
+          lineupLine.textContent = `Lineup status: ${g.lineup_status}`;
+          if (g.lineup_status !== 'confirmed') lineupLine.classList.add('mlb-validate-warning');
+          gameBox.appendChild(lineupLine);
+
+          if (g.lineup_status === 'confirmed' && g.lineup) {
+            for (const side of g.lineup) {
+              const names = side.batters.map(b => `${b.batting_order}. ${b.name} (${b.position})`).join(', ');
+              const sideLine = document.createElement('div');
+              sideLine.className = 'mlb-validate-line';
+              sideLine.style.fontSize = '0.8rem';
+              sideLine.textContent = `${side.team}: ${names}`;
+              gameBox.appendChild(sideLine);
+            }
+          }
+
+          if (g.warnings.length > 0) {
+            const warnBox = document.createElement('div');
+            warnBox.className = 'mlb-validate-warning';
+            warnBox.style.marginTop = '0.3rem';
+            warnBox.innerHTML = g.warnings.map(w => `&bull; ${w}`).join('<br>');
+            gameBox.appendChild(warnBox);
+          }
+
+          mlbValidateResults.appendChild(gameBox);
+        }
+      } catch (e) {
+        mlbValidateStatus.textContent = 'Error: ' + e;
+      }
+    });
+
+    const dateInput = document.getElementById('date-input');
+    dateInput.valueAsDate = new Date();
+
+    const fetchStatus = document.getElementById('fetch-status');
+    const tbody = document.querySelector('#results-table tbody');
+    const emptyState = document.getElementById('empty-state');
+
+    document.querySelectorAll('.save-provider-key-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const provider = btn.dataset.provider;
+        const inputId = btn.dataset.input;
+        const input = document.getElementById(inputId);
+        const statusEl = document.querySelector(`.provider-key-status[data-provider="${provider}"]`);
+        const key = input.value;
+
+        statusEl.textContent = 'Saving...';
+        try {
+          const resp = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: provider, api_key: key })
+          });
+          const data = await resp.json();
+          statusEl.textContent = resp.ok ? 'Saved.' : ('Error: ' + data.error);
+          if (resp.ok) input.value = '';
+        } catch (e) {
+          statusEl.textContent = 'Error: ' + e;
+        }
+      });
+    });
+
+    document.getElementById('fetch-btn').addEventListener('click', async () => {
+      const gameDate = dateInput.value;
+      const book = document.getElementById('book-input').value;
+      const forceRefresh = document.getElementById('force-refresh-input').checked;
+      fetchStatus.textContent = 'Fetching...';
+      tbody.innerHTML = '';
+      emptyState.style.display = 'none';
+
+      try {
+        const resp = await fetch(`/api/fetch-odds?date=${gameDate}&book=${book}&refresh=${forceRefresh}`);
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          fetchStatus.textContent = 'Error: ' + data.error;
+          return;
+        }
+
+        const cacheNote = data.from_cache
+          ? ` (cached, ${data.cache_age_minutes} min old -- check "Force live refresh" for current data)`
+          : '';
+        const providerNote = (!data.from_cache && data.provider_used)
+          ? ` [via ${data.provider_used}]`
+          : '';
+
+        if (data.results.length === 0) {
+          fetchStatus.textContent = `No HR odds found for ${data.date} (${data.book}).${cacheNote}`;
+          if (data.diagnostics) renderDiagnostics(data.diagnostics);
+          if (data.fallback_attempts) renderFallbackAttempts(data.fallback_attempts);
+          return;
+        }
+
+        fetchStatus.textContent = `${data.results.length} players found for ${data.date}${cacheNote}${providerNote}`;
+        for (const r of data.results) {
+          const tr = document.createElement('tr');
+          const oddsLabel = (r.odds > 0 ? '+' : '') + r.odds;
+          tr.innerHTML = `<td>${r.player}</td><td>${r.book}</td><td>${oddsLabel}</td><td>${r.implied_probability}%</td>`;
+          tbody.appendChild(tr);
+        }
+      } catch (e) {
+        fetchStatus.textContent = 'Error: ' + e;
+      }
+    });
+
+    function renderDiagnostics(diag) {
+      emptyState.style.display = 'block';
+      emptyState.innerHTML = '';
+
+      if (!diag) {
+        emptyState.textContent = 'No odds fetched yet.';
+        return;
+      }
+      if (diag.games_found === 0) {
+        emptyState.innerHTML = 'No MLB games found on this date. Try a different date.';
+        return;
+      }
+
+      const selectedBook = document.getElementById('book-input').value;
+      const anyBookAnywhereHasMarket = diag.games.some(g => g.books_with_hr_market.length > 0);
+
+      let bannerHtml = '';
+      if (!anyBookAnywhereHasMarket) {
+        bannerHtml =
+          '<strong>No US bookmaker has this market for any game today.</strong> ' +
+          'That usually means props just aren\'t posted yet (check back closer to game time), ' +
+          'but if this keeps happening at all hours, your Odds API plan may not include player props -- ' +
+          'worth checking your plan details at ' +
+          '<a href="https://the-odds-api.com/account/" target="_blank" rel="noopener">the-odds-api.com/account</a>.';
+      }
+      if (diag.api_quota_remaining !== null && diag.api_quota_remaining !== undefined) {
+        bannerHtml += `<br>API quota: ${diag.api_quota_used} used, ${diag.api_quota_remaining} remaining.`;
+      }
+      if (bannerHtml) {
+        const banner = document.createElement('div');
+        banner.innerHTML = bannerHtml;
+        banner.style.marginBottom = '0.75rem';
+        emptyState.appendChild(banner);
+      }
+
+      const header = document.createElement('div');
+      header.textContent = `${diag.games_found} game(s) found for this date:`;
+      emptyState.appendChild(header);
+
+      for (const g of diag.games) {
+        const line = document.createElement('div');
+        line.style.margin = '0.3rem 0';
+
+        let text;
+        if (g.http_status !== 200) {
+          text = `${g.matchup}: request failed (HTTP ${g.http_status}) -- ${g.error || ''}`;
+        } else if (g.books_with_hr_market.length === 0) {
+          text = `${g.matchup}: no bookmaker in the US region has posted HR props for this game yet.`;
+        } else {
+          text = `${g.matchup}: HR props ARE posted, but by ${g.books_with_hr_market.join(', ')} -- not your selected book.`;
+        }
+
+        const span = document.createElement('span');
+        span.textContent = '\u2022 ' + text + ' ';
+        line.appendChild(span);
+
+        const debugBtn = document.createElement('button');
+        debugBtn.textContent = 'Debug this game';
+        debugBtn.style.fontSize = '0.75rem';
+        debugBtn.style.padding = '0.2rem 0.5rem';
+        debugBtn.addEventListener('click', () => showRawMarkets(g.event_id, selectedBook, line));
+        line.appendChild(debugBtn);
+
+        const rawBox = document.createElement('pre');
+        rawBox.className = 'raw-markets-box';
+        rawBox.style.display = 'none';
+        line.appendChild(rawBox);
+
+        emptyState.appendChild(line);
+      }
+    }
+
+    function renderFallbackAttempts(attempts) {
+      // Appends to whatever renderDiagnostics already put in emptyState
+      // -- doesn't clear it. Shows which providers were tried and why,
+      // e.g. "odds_api: empty -> parlay_api: success" so it's obvious
+      // when/why a backup provider actually got used.
+      if (!attempts || attempts.length === 0) return;
+
+      const box = document.createElement('div');
+      box.style.marginTop = '0.75rem';
+
+      const STATUS_LABELS = {
+        skipped_no_key: 'no key configured',
+        error: 'error',
+        empty: 'no odds found',
+        success: 'succeeded',
+      };
+
+      const title = document.createElement('div');
+      title.innerHTML = '<strong>Provider fallback chain:</strong>';
+      box.appendChild(title);
+
+      for (const a of attempts) {
+        const line = document.createElement('div');
+        line.style.fontSize = '0.85rem';
+        line.style.margin = '0.15rem 0';
+        let text = `${a.provider}: ${STATUS_LABELS[a.status] || a.status}`;
+        if (a.status === 'error') text += ` (${a.error})`;
+        if (a.status === 'success') text += ` (${a.quotes_found} quote(s))`;
+        line.textContent = '\u2022 ' + text;
+        if (a.status === 'success') line.style.color = 'var(--good)';
+        box.appendChild(line);
+      }
+
+      emptyState.appendChild(box);
+    }
+
+    async function showRawMarkets(eventId, book, container) {
+      const rawBox = container.querySelector('.raw-markets-box');
+      rawBox.style.display = 'block';
+      rawBox.textContent = 'Loading raw market list...';
+      try {
+        const resp = await fetch(`/api/debug-markets?event_id=${eventId}&book=${book}`);
+        const data = await resp.json();
+        if (!resp.ok) {
+          rawBox.textContent = 'Error: ' + data.error;
+          return;
+        }
+        rawBox.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        rawBox.textContent = 'Error: ' + e;
+      }
+    }
+
+    const reportDateInput = document.getElementById('report-date-input');
+    reportDateInput.valueAsDate = new Date();
+
+    const reportStatus = document.getElementById('report-status');
+    const reportWarnings = document.getElementById('report-warnings');
+    const reportTable = document.getElementById('report-table');
+    const reportTableHead = document.getElementById('report-table-head');
+    const reportTableBody = document.getElementById('report-table-body');
+
+    document.getElementById('generate-report-btn').addEventListener('click', async () => {
+      const gameDate = reportDateInput.value;
+      const stage = document.getElementById('report-stage-input').value;
+      const forceRefresh = document.getElementById('report-force-refresh-input').checked;
+      reportStatus.textContent = 'Generating report... this can take a while (many API calls).';
+      reportWarnings.innerHTML = '';
+      reportTable.style.display = 'none';
+      reportTableBody.innerHTML = '';
+      reportTableHead.innerHTML = '';
+
+      try {
+        const resp = await fetch(`/api/daily-report?date=${gameDate}&stage=${stage}&refresh=${forceRefresh}`);
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          reportStatus.textContent = 'Error: ' + data.error;
+          return;
+        }
+
+        if (data.warnings && data.warnings.length > 0) {
+          const warnBox = document.createElement('div');
+          warnBox.className = 'mlb-validate-warning';
+          warnBox.innerHTML =
+            `<strong>${data.warnings.length} warning(s):</strong><br>` +
+            data.warnings.map(w => `&bull; ${w}`).join('<br>');
+          reportWarnings.appendChild(warnBox);
+        }
+
+        if (stage === 'watch') {
+          reportStatus.textContent =
+            `${data.games_found} game(s) found -- ${data.watch_list.length} player(s) on the watch list.`;
+          if (data.watch_list.length === 0) return;
+
+          reportTableHead.innerHTML =
+            '<tr><th>Player</th><th>Team</th><th>Opp. Pitcher</th><th>Quality Score</th><th>Reasons</th></tr>';
+          for (const w of data.watch_list) {
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+              `<td>${w.player}</td><td>${w.team}</td><td>${w.opposing_pitcher}</td>` +
+              `<td>${w.quality_score} / 85</td><td>${w.reasons.join(', ') || '\u2014'}</td>`;
+            reportTableBody.appendChild(tr);
+          }
+        } else {
+          reportStatus.textContent =
+            `${data.games_found} game(s) found -- ${data.players_scored} confirmed starter(s) scored.`;
+          if (data.rankings.length === 0) return;
+
+          reportTableHead.innerHTML =
+            '<tr><th>Rank</th><th>Player</th><th>Matchup</th><th>Alpha Score</th>' +
+            '<th>Odds</th><th>Edge %</th><th>Strengths</th><th>Risks</th></tr>';
+          data.rankings.forEach((r, i) => {
+            const tr = document.createElement('tr');
+            const oddsLabel = r.odds !== null ? ((r.odds > 0 ? '+' : '') + r.odds + ' (' + r.book + ')') : 'no odds found';
+            const edgeLabel = r.edge_pct !== null ? r.edge_pct + '%' : '\u2014';
+            tr.innerHTML =
+              `<td>${i + 1}</td><td>${r.player}</td><td>${r.matchup}</td><td>${r.alpha_score} / 100</td>` +
+              `<td>${oddsLabel}</td><td>${edgeLabel}</td>` +
+              `<td>${r.strengths.join(', ') || '\u2014'}</td><td>${r.risks.join(', ') || '\u2014'}</td>`;
+            reportTableBody.appendChild(tr);
+          });
+        }
+
+        reportTable.style.display = 'table';
+      } catch (e) {
+        reportStatus.textContent = 'Error: ' + e;
+      }
+    });
+
+    // --- Historical tracking: auto-fetch results ---
+    const recordDateInput = document.getElementById('record-date-input');
+    recordDateInput.valueAsDate = new Date();
+    const recordStatus = document.getElementById('record-status');
+    const recordWarnings = document.getElementById('record-warnings');
+
+    document.getElementById('auto-record-btn').addEventListener('click', async () => {
+      const d = recordDateInput.value;
+      recordStatus.textContent = 'Fetching box scores and matching results...';
+      recordWarnings.innerHTML = '';
+
+      try {
+        const resp = await fetch(`/api/auto-record-results?date=${d}`, { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) {
+          recordStatus.textContent = 'Error: ' + data.error;
+          return;
+        }
+
+        recordStatus.textContent =
+          `${data.players_recorded} result(s) recorded, ${data.players_skipped} skipped.`;
+
+        if (data.warnings && data.warnings.length > 0) {
+          const warnBox = document.createElement('div');
+          warnBox.className = 'mlb-validate-warning';
+          warnBox.innerHTML =
+            `<strong>Details:</strong><br>` + data.warnings.map(w => `&bull; ${w}`).join('<br>');
+          recordWarnings.appendChild(warnBox);
+        }
+      } catch (e) {
+        recordStatus.textContent = 'Error: ' + e;
+      }
+    });
+
+    // --- Historical tracking: backtest summary ---
+    const backtestTable = document.getElementById('backtest-table');
+    const backtestTableBody = document.getElementById('backtest-table-body');
+
+    document.getElementById('run-backtest-btn').addEventListener('click', async () => {
+      backtestTableBody.innerHTML = '';
+      try {
+        const resp = await fetch('/api/backtest-summary');
+        const data = await resp.json();
+        if (!resp.ok) {
+          alert('Error: ' + data.error);
+          return;
+        }
+        for (const t of data.tiers) {
+          const tr = document.createElement('tr');
+          const hitRate = t.hit_rate !== null ? (t.hit_rate * 100).toFixed(1) + '%' : '\u2014';
+          const edge = t.avg_edge_pct !== null ? t.avg_edge_pct + '%' : '\u2014';
+          const roi = t.roi !== null ? (t.roi * 100).toFixed(1) + '%' : '\u2014';
+          tr.innerHTML =
+            `<td>${t.tier}</td><td>${t.sample_count}</td><td>${hitRate}</td><td>${edge}</td><td>${roi}</td>`;
+          backtestTableBody.appendChild(tr);
+        }
+        backtestTable.style.display = 'table';
+      } catch (e) {
+        alert('Error: ' + e);
+      }
+    });
+
+    // --- Historical tracking: data summary ---
+    const dateSummaryTable = document.getElementById('date-summary-table');
+    const dateSummaryTableBody = document.getElementById('date-summary-table-body');
+    const dateSummaryStatus = document.getElementById('date-summary-status');
+
+    document.getElementById('load-date-summary-btn').addEventListener('click', async () => {
+      dateSummaryStatus.textContent = 'Loading...';
+      dateSummaryTableBody.innerHTML = '';
+      dateSummaryTable.style.display = 'none';
+
+      try {
+        const resp = await fetch('/api/date-summary');
+        const data = await resp.json();
+        if (!resp.ok) {
+          dateSummaryStatus.textContent = 'Error: ' + data.error;
+          return;
+        }
+        if (data.dates.length === 0) {
+          dateSummaryStatus.textContent =
+            'No data saved yet -- run a Stage 2 report to start collecting.';
+          return;
+        }
+
+        dateSummaryStatus.textContent = `${data.dates.length} date(s) with saved data.`;
+        for (const d of data.dates) {
+          const tr = document.createElement('tr');
+          const avgScore = d.avg_alpha_score !== null ? d.avg_alpha_score : '\u2014';
+          const topScore = d.top_alpha_score !== null ? d.top_alpha_score : '\u2014';
+          tr.innerHTML =
+            `<td>${d.date}</td><td>${d.players_saved}</td>` +
+            `<td>${d.players_with_results} / ${d.players_saved}</td>` +
+            `<td>${d.hrs_hit}</td><td>${avgScore}</td><td>${topScore}</td>`;
+          dateSummaryTableBody.appendChild(tr);
+        }
+        dateSummaryTable.style.display = 'table';
+      } catch (e) {
+        dateSummaryStatus.textContent = 'Error: ' + e;
+      }
+    });
+
+    // --- Historical tracking: sub-metric breakdown diagnostic ---
+    const breakdownStatus = document.getElementById('breakdown-status');
+    const breakdownResults = document.getElementById('breakdown-results');
+
+    const CATEGORY_LABELS = {
+      pitcher_vulnerability: 'Pitcher Vulnerability (35 pts)',
+      hitter_power: 'Hitter Power Profile (25 pts)',
+      environment: 'Environment (25 pts)',
+      betting_value: 'Betting Value (15 pts)',
+    };
+
+    document.getElementById('load-breakdown-btn').addEventListener('click', async () => {
+      breakdownStatus.textContent = 'Loading...';
+      breakdownResults.innerHTML = '';
+
+      try {
+        const resp = await fetch('/api/breakdown-diagnostic');
+        const data = await resp.json();
+        if (!resp.ok) {
+          breakdownStatus.textContent = 'Error: ' + data.error;
+          return;
+        }
+        if (data.sample_count === 0) {
+          breakdownStatus.textContent = 'No data saved yet -- run a Stage 2 report first.';
+          return;
+        }
+
+        breakdownStatus.textContent = `Based on ${data.sample_count} saved player-rows.`;
+
+        for (const [category, subMetrics] of Object.entries(data.categories)) {
+          const box = document.createElement('div');
+          box.className = 'mlb-validate-game';
+
+          const title = document.createElement('div');
+          title.innerHTML = `<strong>${CATEGORY_LABELS[category] || category}</strong>`;
+          box.appendChild(title);
+
+          const table = document.createElement('table');
+          table.style.marginTop = '0.4rem';
+          const thead = document.createElement('thead');
+          thead.innerHTML =
+            '<tr><th>Sub-metric</th><th>Max Pts</th><th>Avg Pts</th>' +
+            '<th>Avg % of Max</th><th>% Rows w/ Data</th></tr>';
+          table.appendChild(thead);
+
+          const tbody = document.createElement('tbody');
+          for (const s of subMetrics) {
+            const tr = document.createElement('tr');
+            const pctOfMax = s.avg_pct_of_max !== null ? s.avg_pct_of_max + '%' : 'n/a (not implemented)';
+            const pctData = s.pct_rows_with_data + '%';
+            if (s.pct_rows_with_data === 0 && s.max_points > 0) {
+              tr.classList.add('mlb-validate-warning');
+            }
+            tr.innerHTML =
+              `<td>${s.sub_metric}</td><td>${s.max_points}</td><td>${s.avg_points}</td>` +
+              `<td>${pctOfMax}</td><td>${pctData}</td>`;
+            tbody.appendChild(tr);
+          }
+          table.appendChild(tbody);
+          box.appendChild(table);
+
+          breakdownResults.appendChild(box);
+        }
+      } catch (e) {
+        breakdownStatus.textContent = 'Error: ' + e;
+      }
+    });
+
+    // --- Historical tracking: benchmark calibration audit ---
+    const calibrationSeasonInput = document.getElementById('calibration-season-input');
+    calibrationSeasonInput.value = new Date().getFullYear();
+    const calibrationStatus = document.getElementById('calibration-status');
+    const calibrationWarnings = document.getElementById('calibration-warnings');
+    const calibrationTable = document.getElementById('calibration-table');
+    const calibrationTableBody = document.getElementById('calibration-table-body');
+
+    document.getElementById('run-calibration-btn').addEventListener('click', async () => {
+      const season = calibrationSeasonInput.value;
+      const minIp = document.getElementById('calibration-min-ip-input').value || 0;
+      const minPa = document.getElementById('calibration-min-pa-input').value || 0;
+      calibrationStatus.textContent = 'Pulling live league distributions... this makes several API calls.';
+      calibrationWarnings.innerHTML = '';
+      calibrationTableBody.innerHTML = '';
+      calibrationTable.style.display = 'none';
+
+      try {
+        const resp = await fetch(`/api/calibration-audit?season=${season}&min_ip=${minIp}&min_pa=${minPa}`);
+        const data = await resp.json();
+        if (!resp.ok) {
+          calibrationStatus.textContent = 'Error: ' + data.error;
+          return;
+        }
+
+        const severeCount = data.metrics.filter(
+          m => m.production_impact_severity === 'CRITICAL' || m.production_impact_severity === 'SEVERE'
+        ).length;
+        calibrationStatus.textContent =
+          `${data.metrics.length} benchmark ranges checked -- ${severeCount} with severe/critical production impact.`;
+
+        if (data.warnings && data.warnings.length > 0) {
+          const warnBox = document.createElement('div');
+          warnBox.className = 'mlb-validate-warning';
+          warnBox.innerHTML =
+            `<strong>${data.warnings.length} data-source warning(s):</strong><br>` +
+            data.warnings.map(w => `&bull; ${w}`).join('<br>');
+          calibrationWarnings.appendChild(warnBox);
+        }
+
+        for (const m of data.metrics) {
+          const tr = document.createElement('tr');
+          const currentRange = `${m.current_low} - ${m.current_high}`;
+          const suggestedRange = m.suggested_low !== null ? `${m.suggested_low} - ${m.suggested_high}` : '\u2014';
+          const p10 = m.p10 !== null ? m.p10 : '\u2014';
+          const p50 = m.p50 !== null ? m.p50 : '\u2014';
+          const p90 = m.p90 !== null ? m.p90 : '\u2014';
+
+          // Highlight by PRODUCTION IMPACT, not just the statistical
+          // verdict -- a range can read as merely "possibly too narrow"
+          // statistically while still crushing most real players, which
+          // is exactly the gap this two-dimensional check exists to catch.
+          const severity = m.production_impact_severity;
+          if (severity === 'CRITICAL' || severity === 'SEVERE') {
+            tr.classList.add('mlb-validate-warning');
+          }
+
+          const impactLabel = m.pct_crushed_total !== null
+            ? `${severity}<br><span class="hint">${m.pct_crushed_total}% crushed to floor/ceiling</span>`
+            : '\u2014';
+
+          tr.innerHTML =
+            `<td>${m.metric}<br><span class="hint">${m.model}</span></td>` +
+            `<td>${currentRange}</td>` +
+            `<td>${m.sample_count}<br><span class="hint">${m.population}</span></td>` +
+            `<td>${p10}</td><td>${p50}</td><td>${p90}</td>` +
+            `<td>${suggestedRange}</td><td>${impactLabel}</td><td>${m.statistical_verdict}</td>`;
+          calibrationTableBody.appendChild(tr);
+        }
+        calibrationTable.style.display = 'table';
+      } catch (e) {
+        calibrationStatus.textContent = 'Error: ' + e;
+      }
+    });
+
+    // --- Historical tracking: raw bulk stats inspector ---
+    const bulkDebugSeasonInput = document.getElementById('bulk-debug-season-input');
+    bulkDebugSeasonInput.value = new Date().getFullYear();
+    const bulkDebugStatus = document.getElementById('bulk-debug-status');
+    const bulkDebugResults = document.getElementById('bulk-debug-results');
+
+    document.getElementById('run-bulk-debug-btn').addEventListener('click', async () => {
+      const season = bulkDebugSeasonInput.value;
+      const group = document.getElementById('bulk-debug-group-input').value;
+      const extraParams = document.getElementById('bulk-debug-extra-params-input').value.trim();
+      bulkDebugStatus.textContent = 'Fetching raw response...';
+      bulkDebugResults.innerHTML = '';
+
+      try {
+        let url = `/api/debug-bulk-stats?group=${group}&season=${season}`;
+        if (extraParams) url += `&extra_params=${encodeURIComponent(extraParams)}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (!resp.ok) {
+          bulkDebugStatus.textContent = 'Error: ' + data.error;
+          return;
+        }
+
+        const dropped = data.splits_with_zero_or_missing_pa_or_ip;
+        bulkDebugStatus.textContent =
+          `API returned ${data.splits_count_raw} raw row(s). ` +
+          `${data.splits_with_positive_pa_or_ip} would survive our filter, ${dropped} would be dropped.`;
+
+        const box = document.createElement('div');
+        box.className = 'mlb-validate-game';
+
+        const summary = document.createElement('div');
+        summary.innerHTML =
+          `<strong>Request:</strong> ${data.request_url}?` +
+          new URLSearchParams(data.request_params).toString() + '<br>' +
+          `<strong>Top-level response keys:</strong> ${data.top_level_keys.join(', ')}`;
+        box.appendChild(summary);
+
+        if (Object.keys(data.other_top_level_fields).length > 0) {
+          const otherFields = document.createElement('div');
+          otherFields.className = 'mlb-validate-warning';
+          otherFields.style.marginTop = '0.4rem';
+          otherFields.innerHTML =
+            '<strong>Non-"stats" top-level fields found (check for pagination/total-count metadata):</strong><br>' +
+            '<pre class="raw-markets-box">' + JSON.stringify(data.other_top_level_fields, null, 2) + '</pre>';
+          box.appendChild(otherFields);
+        }
+
+        const sampleTitle = document.createElement('div');
+        sampleTitle.style.marginTop = '0.4rem';
+        sampleTitle.innerHTML = '<strong>Sample raw splits (first 5, completely unfiltered):</strong>';
+        box.appendChild(sampleTitle);
+
+        const rawBox = document.createElement('pre');
+        rawBox.className = 'raw-markets-box';
+        rawBox.textContent = JSON.stringify(data.sample_splits, null, 2);
+        box.appendChild(rawBox);
+
+        bulkDebugResults.appendChild(box);
+      } catch (e) {
+        bulkDebugStatus.textContent = 'Error: ' + e;
+      }
+    });
+  </script>
+</body>
+</html>

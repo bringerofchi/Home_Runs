@@ -1,0 +1,10 @@
+{
+  "version": "alpha_v1.1",
+  "weights": {
+    "pitcher_vulnerability": 35,
+    "hitter_power": 25,
+    "environment": 25,
+    "betting_value": 15
+  },
+  "notes": "alpha_v1.1: replaced estimate_model_probability()'s uncalibrated 0.4x-2.2x heuristic multiplier with a linear fit calibrated against 8,189 real (quality_score, actual HR-or-not) pairs from 2026-07-17 through 2026-09-05 (Phase 5 validation). Category weights unchanged. Also added game_total to environment scoring (live Odds API totals market) -- park_hr_factor still not ingested. Increment version before changing scoring logic or weights."
+}
