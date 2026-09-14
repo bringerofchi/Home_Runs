@@ -7,3 +7,4 @@ data/processed/*
 !data/processed/.gitkeep
 *.db
 *.sqlite3
+desktop.ini
