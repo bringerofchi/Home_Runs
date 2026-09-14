@@ -1,77 +1,49 @@
-# MLB HR Edge Lab
+# MLB HR Alpha Lab
 
-A **standalone** MLB Home Run Edge analysis application.
-
-## Purpose
-
-Identify MLB hitters whose true home run probability is higher than the
-probability implied by sportsbook odds — i.e. find betting edge, not
-guaranteed outcomes.
-
-## Independence
-
-This project is completely independent from the existing **MLB Edge Lab**
-project. It does not modify, merge, read from, or write to:
-
-- Existing MLB Edge Lab code
-- Existing databases
-- Existing APIs
-- Existing scoring systems
-- Existing reports
-
-If this project proves out, it may later **export** data for MLB Edge Lab
-to consume — but that is a one-way, opt-in integration point, not a
-dependency.
-
-## Project Structure
-
-```
-MLB-HR-Edge-Lab/
-├── data/
-│   ├── raw/            # Unprocessed daily pulls (games, players, odds, weather)
-│   └── processed/       # Cleaned/joined data ready for modeling
-├── database/            # DB schema, connection, and models (SQLite to start)
-├── ingestion/
-│   ├── mlb_data.py      # Game/pitcher/hitter stats from MLB sources
-│   ├── weather.py       # Park + weather conditions
-│   └── odds.py          # FanDuel HR odds -> implied probability
-├── models/
-│   ├── pitcher_model.py # Pitcher HR vulnerability scoring
-│   ├── hitter_model.py  # Hitter power profile scoring
-│   └── alpha_score.py   # Combines pitcher + hitter + environment + odds -> 0-100 HR Alpha Score
-├── reports/
-│   └── daily_report.py  # Pre-lineup watch list + confirmed lineup rankings
-├── api/                  # Optional API layer for serving results
-├── tests/                # Unit tests for each module
-└── README.md
-```
+MLB HR Alpha Lab is a standalone local application for ranking MLB hitters for home-run research. It combines pitcher vulnerability, hitter power, environment, and market price into a transparent 0–100 HR Alpha Score. It does not place bets or guarantee outcomes.
 
 ## Workflow
 
-1. **Stage 1 — Pre-Lineup Analysis**: run before official lineups post.
-   Produces an HR Watch List (non-final).
-2. **Stage 2 — Confirmed Lineup Analysis**: after lineups are released.
-   Updates starters/order/PA projections and produces final rankings.
+The dashboard supports two stages:
 
-## HR Alpha Score (0–100, fully transparent)
+1. **Watch list:** pre-lineup candidates using probable pitchers and likely player context.
+2. **Final rankings:** confirmed starters and batting orders, actual opposing pitcher, available environment data, and available HR market prices.
 
-| Category               | Points |
-|-------------------------|-------|
-| Pitcher Vulnerability   | 35    |
-| Hitter Power Profile    | 25    |
-| Environment             | 25    |
-| Betting Value           | 15    |
+It can retrieve MLB schedule, player, lineup, and box-score data; inspect Statcast/MLB ingestion health; pull player-HR odds from configured providers; cache odds to conserve API quota; save rankings; and automatically record final HR outcomes where player identity can be matched.
 
-Every score is broken down into its category contributions plus a list of
-strengths/risks — never a black box.
+## Alpha Score
 
-## Status
+The transparent score has four categories:
 
-Project scaffold only. Modules are stubbed with clear responsibilities and
-TODOs. No live data collection has been implemented yet.
+- Pitcher vulnerability: 35 points
+- Hitter power: 25 points
+- Environment: 25 points
+- Betting value: 15 points
 
-## Future Expansion (not built yet)
+The current model probability is a deliberately simple calibrated linear fit over the first three quality categories. It should be treated as an early calibration layer, not a finished predictive model. Some environmental inputs remain unavailable or partial, and missing data produces no contribution rather than invented values.
 
-Live HR probability updates, cash-out evaluator, hedge calculator, Kelly
-sizing, bankroll management, automated betting slip evaluation, and the
-eventual MLB Edge Lab export/integration point.
+## Odds and results
+
+The Odds API is the primary HR-prop source. ParlayAPI and SharpAPI are configured as optional fallbacks, but their own source docstrings mark both integrations as unverified/best-effort against a live API response — treat them as speculative until confirmed, not as confirmed-working backups. The application degrades gracefully when odds are unavailable: it can still rank players, while clearly omitting market-value fields.
+
+Its own SQLite store, `database/hr_edge_lab.db`, holds:
+
+- Daily Alpha Score snapshots and category-level explanations
+- Model and implied probabilities, edge, expected value, odds, book, matchup, and player/game identifiers
+- Postgame HR outcomes, P&L, entered and closing odds, CLV, and outcome source
+- Short-lived odds cache entries
+
+## Backtesting and evidence
+
+The dashboard exposes date summaries, score-tier summaries, category-coverage diagnostics, and calibration audit tools. Source comments describe a calibration fit built from 8,189 historical score/outcome pairs, but the actual SQLite database and raw/processed data are intentionally not committed here. Therefore that sample and its results must be re-extracted from the local database before being represented as independently reproducible evidence.
+
+## Independence
+
+This application is independent from MLB Edge Lab (currently at `C:\Projects\baseball stats\mlb_edge_lab`) and has its own schema, storage, scoring, and runtime. Any later cross-project research should use an explicit export—not shared tables or implicit dependencies.
+
+## Limitations
+
+- HR is a highly variable binary outcome; score tiers need adequate samples.
+- Some provider integrations and availability vary by slate and bookmaker.
+- Missing park/weather or player data reduces score coverage.
+- Closing-price capture is not yet a full historical market-snapshot system.
