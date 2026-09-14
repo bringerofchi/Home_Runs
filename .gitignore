@@ -8,3 +8,4 @@ data/processed/*
 *.db
 *.sqlite3
 desktop.ini
+.pytest_cache/
