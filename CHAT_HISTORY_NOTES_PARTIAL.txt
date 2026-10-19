@@ -1,0 +1,20 @@
+MLB EDGE / BASEBALL ANALYSIS — PARTIAL CHAT HISTORY NOTES
+Created: 2026-10-18
+
+SCOPE
+Partial recovery from saved context and existing Library references; not a complete archived-chat audit.
+
+KNOWN MATERIAL
+- Existing Library includes “MLB EDGE tools” and mlb-edge-validation-status-note_4.md, dashboard.js, and mlb-edge-2026-07-21.json.
+- Related HR Edge Lab work references Home_Runs / HR Edge Lab and a database expected at database/hr_edge_lab.db with alpha_scores and results tables.
+
+VALIDATION GUARDRAILS
+- Preserve validation status, known limitations, source data, and recorded outputs so conclusions remain reproducible.
+- Do not present an incomplete pilot as production-validated.
+- For Alpha Score analysis, join the actual saved Alpha Scores to actual HR results. If the expected database is unavailable, say the analysis is blocked; do not reconstruct or invent numbers.
+- A prior analysis context did not have a populated hr_edge_lab.db available, despite a reported expectation of 8,302 rows. Verify the current database and row counts before using that claim.
+- A prior request explicitly prohibited changes to the model, scoring weights/ranges, schema, or production code during the analysis.
+- Do not treat an individual matchup discussion or unverified probability estimate as a validated model finding.
+
+PRESERVATION
+Keep the validation note and dated JSON snapshot until their contents and lineage are reviewed. This note is a partial recovery and does not replace canonical project documentation.
